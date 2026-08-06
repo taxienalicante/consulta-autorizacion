@@ -1,0 +1,16 @@
+{
+  "name": "Consulta autorización de transporte",
+  "short_name": "Autorización",
+  "description": "Lleva a la consulta oficial del Registro de Transporte por matrícula.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5f6",
+  "theme_color": "#0b5d3b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

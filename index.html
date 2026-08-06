@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b5d3b">
+<title>Consulta autorización de transporte</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{ --verde:#0b5d3b; --verde2:#0d7a4d; --gris:#f4f5f6; --texto:#1a1a1a; --borde:#cfd4d8; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:-apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--gris); color:var(--texto);
+    min-height:100dvh; padding:16px calc(16px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    max-width:520px; margin:0 auto;
+  }
+  header{ text-align:center; margin:6px 0 14px; }
+  header h1{ font-size:19px; margin:0; color:var(--verde); line-height:1.25; }
+  header p{ font-size:13px; color:#5a6268; margin:6px 0 0; }
+  .card{ background:#fff; border:1px solid var(--borde); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label{ display:block; font-size:13px; font-weight:600; margin-bottom:8px; color:#333; }
+  #matricula{
+    width:100%; font-size:30px; font-weight:700; letter-spacing:3px; text-align:center;
+    text-transform:uppercase; padding:14px 10px; border:2px solid var(--borde); border-radius:12px;
+    background:#fff; color:var(--texto);
+  }
+  #matricula:focus{ outline:none; border-color:var(--verde2); }
+  .big{
+    margin-top:12px; text-align:center; font-size:40px; font-weight:800; letter-spacing:5px;
+    color:var(--verde); min-height:48px; word-break:break-all;
+  }
+  .big.vacia{ color:#b7bdc2; font-size:22px; font-weight:600; letter-spacing:1px; }
+  button{
+    width:100%; font-size:17px; font-weight:700; padding:16px; border:none; border-radius:12px;
+    cursor:pointer; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .primary{ background:var(--verde); color:#fff; }
+  .primary:active{ background:#094a2f; }
+  .secondary{ background:#e8eef0; color:#0b3b28; }
+  .secondary:active{ background:#d7e0e3; }
+  .ghost{ background:#fff; color:var(--verde); border:2px solid var(--verde); }
+  .ghost:active{ background:#eef7f2; }
+  .estado{ font-size:13px; text-align:center; margin-top:10px; min-height:18px; color:#5a6268; }
+  .estado.err{ color:#b3261e; }
+  .estado.ok{ color:var(--verde2); }
+  .nota{ font-size:12px; color:#6b7378; line-height:1.5; margin-top:4px; }
+  .nota strong{ color:#3a4247; }
+  .aviso{ background:#fff8e1; border:1px solid #f0d98a; border-radius:12px; padding:12px 14px; font-size:12.5px; color:#5b4b16; line-height:1.5; }
+  progress{ width:100%; height:8px; margin-top:10px; display:none; }
+  input[type=file]{ display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Consulta de autorización de transporte</h1>
+  <p>Registro del Ministerio · consulta por matrícula</p>
+</header>
+
+<div class="card">
+  <label for="matricula">Matrícula del vehículo</label>
+  <input id="matricula" type="text" inputmode="latin" autocapitalize="characters"
+         autocomplete="off" spellcheck="false" placeholder="0000 XXX" maxlength="12">
+
+  <button class="secondary" id="btnFoto">📷 Leer matrícula con foto</button>
+  <input type="file" id="fileFoto" accept="image/*" capture="environment">
+  <progress id="prog" max="100" value="0"></progress>
+  <div class="estado" id="estado"></div>
+</div>
+
+<div class="card">
+  <label>Matrícula a consultar</label>
+  <div class="big vacia" id="grande">—</div>
+  <button class="ghost" id="btnCopiar">⧉ Copiar matrícula</button>
+  <button class="primary" id="btnAbrir">Abrir web del Ministerio →</button>
+  <p class="nota" id="notaAbrir">Se abre la web oficial. Escribe/pega la matrícula, resuelve el CAPTCHA y pulsa <strong>Consultar</strong>. El resultado lo lees tú en esa web.</p>
+</div>
+
+<div class="aviso">
+  Esta app solo te lleva a la consulta oficial. No lee, no interpreta ni guarda ningún dato del vehículo ni de la respuesta. Uso para control puntual justificado.
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
+<script>
+const MIN_URL = "https://apps.fomento.gob.es/crgt/servlet/ServletController?modulo=datosconsulta&accion=inicio&lang=es&estilo=default";
+
+const $ = id => document.getElementById(id);
+const inp = $('matricula'), grande = $('grande'), estado = $('estado'), prog = $('prog');
+
+function pintaGrande(){
+  const v = inp.value.trim().toUpperCase();
+  if(v){ grande.textContent = v; grande.classList.remove('vacia'); }
+  else { grande.textContent = '—'; grande.classList.add('vacia'); }
+}
+function setEstado(txt, cls){ estado.textContent = txt || ''; estado.className = 'estado' + (cls?(' '+cls):''); }
+
+// Formateo suave: mayúsculas y solo letras/números/espacio
+inp.addEventListener('input', ()=>{
+  const p = inp.selectionStart;
+  inp.value = inp.value.toUpperCase().replace(/[^A-Z0-9 ]/g,'');
+  inp.setSelectionRange(p,p);
+  pintaGrande();
+});
+
+// --- OCR ---
+$('btnFoto').addEventListener('click', ()=> $('fileFoto').click());
+
+$('fileFoto').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';               // permite repetir la misma foto
+  if(!file) return;
+  if(typeof Tesseract === 'undefined'){ setEstado('Sin conexión para el lector. Escribe la matrícula a mano.', 'err'); return; }
+  setEstado('Leyendo la foto…');
+  prog.style.display = 'block'; prog.value = 5;
+  try{
+    const url = URL.createObjectURL(file);
+    const { data } = await Tesseract.recognize(url, 'eng', {
+      logger: m => { if(m.status==='recognizing text') prog.value = Math.max(10, Math.round(m.progress*100)); },
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    });
+    URL.revokeObjectURL(url);
+    const plate = extraeMatricula(data.text || '');
+    if(plate){
+      inp.value = plate; pintaGrande();
+      setEstado('Detectado: ' + plate + '. Revísalo antes de consultar.', 'ok');
+    } else {
+      setEstado('No se ha podido leer. Escríbela a mano.', 'err');
+    }
+  } catch(err){
+    setEstado('Error leyendo la foto. Escríbela a mano.', 'err');
+  } finally {
+    prog.style.display = 'none'; prog.value = 0;
+  }
+});
+
+// Extrae matrícula española del texto OCR
+function extraeMatricula(raw){
+  const t = raw.toUpperCase().replace(/[^A-Z0-9]/g,' ');
+  const c = t.replace(/\s+/g,'');
+  // Actual: 4 números + 3 letras (sin vocales/Ñ/Q)
+  let m = c.match(/(\d{4})([BCDFGHJKLMNPRSTVWXYZ]{3})/);
+  if(m) return m[1] + ' ' + m[2];
+  // Antigua provincial: 1-2 letras + 4 números + 1-2 letras
+  m = c.match(/([A-Z]{1,2})(\d{4})([A-Z]{1,2})/);
+  if(m) return (m[1] + '-' + m[2] + '-' + m[3]);
+  // Suelto: 4 números seguidos de 3 letras cualesquiera
+  m = c.match(/(\d{4})([A-Z]{3})/);
+  if(m) return m[1] + ' ' + m[2];
+  return '';
+}
+
+// --- Copiar ---
+$('btnCopiar').addEventListener('click', async ()=>{
+  const v = inp.value.trim().toUpperCase();
+  if(!v){ setEstado('No hay matrícula que copiar.', 'err'); return; }
+  try{ await navigator.clipboard.writeText(v); setEstado('Matrícula copiada.', 'ok'); }
+  catch{ inp.focus(); inp.select(); setEstado('Selecciónala y copia manualmente.', 'err'); }
+});
+
+// --- Abrir Ministerio ---
+$('btnAbrir').addEventListener('click', ()=>{
+  const v = inp.value.trim().toUpperCase();
+  if(v){ navigator.clipboard && navigator.clipboard.writeText(v).catch(()=>{}); }
+  window.open(MIN_URL, '_blank', 'noopener');
+});
+
+pintaGrande();
+
+// Registro del service worker (instalable)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
