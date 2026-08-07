@@ -2,7 +2,6 @@
 
 App web instalable en el móvil. Modo B: abre la web oficial del Ministerio y muestra la matrícula en grande para escribirla/pegarla allí. No lee, no interpreta ni guarda ningún dato.
 
-
 ## Archivos
 - `index.html` — la app (pantalla única).
 - `manifest.webmanifest` — datos de instalación.
